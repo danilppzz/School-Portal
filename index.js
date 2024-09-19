@@ -44,14 +44,16 @@ app.get('/gartic_url', (req, res) => {
 });
 
 io.on('connection', (socket) => {
-    console.log('Un usuario se ha conectado');
+    console.log('Un usuario se ha conectado: ', socket.handshake.address);
 
     socket.on('chat message', (data) => {
+        console.log(data, "by: ", socket.handshake.address);
         io.emit('chat message', data);
     });
 
     socket.on('disconnect', () => {
-        console.log('Un usuario se ha desconectado');
+        console.log(socket.id, 'se ha desconectado');
+        console.log('IP del usuario desconectado:', socket.handshake.address);
     });
 });
 
