@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal Escolar</title>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #f0f0f0;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #4A90E2;
+        }
+
+        .container {
+            background-color: beige;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        input[type="text"] {
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            width: calc(100% - 22px);
+        }
+
+        button {
+            background-color: #4A90E2;
+            color: white;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #357ABD;
+        }
+
+        ul {
+            list-style-type: none;
+            padding: 0;
+            max-height: 400px;
+            /* Limitar la altura del contenedor de mensajes */
+            overflow-y: auto;
+            /* Habilitar desplazamiento vertical */
+        }
+
+        li {
+            padding: 8px;
+            margin: 5px 0;
+            background-color: #e7f3fe;
+            border-radius: 5px;
+            max-width: 100%;
+            word-wrap: break-word;
+        }
+
+        .username {
+            font-weight: bold;
+            color: #4A90E2;
+        }
+
+        .chat-container {
+            height: 610px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 10px;
+            width: 100%;
+            background-color: white;
+        }
+
+        img {
+            max-width: 200px;
+            border-radius: 5px;
+            display: block;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Hoy se hace historia</h1>
+    <div style="display: flex; gap: 20px;">
+        <div class="container">
+            <p>URL de Gartic Phone</p>
+            <div>
+                <input type="text" name="url" id="url" placeholder="Ingrese URL">
+                <input type="text" name="url" id="password" placeholder="0000" pattern="[0-9]*" inputmode="numeric"
+                    maxlength="4" style="width: 80px;">
+
+                <button id="update_gartic_url">Actualizar</button>
+            </div>
+            <input type="text" name="url" id="url_base" placeholder="URL Actual" disabled style="margin-top: 10px;">
+            <button id="copy_url" onclick="copyToClipboard()" style="width: 100%;">Copiar</button>
+        </div>
+
+        <div class="container chat-container">
+            <p>Chat</p>
+            <input type="text" id="username" placeholder="Tu nombre" maxlength="12">
+            <input type="text" id="chat" placeholder="Envía tu mensaje">
+            <input type="file" id="fileInput" accept="image/*">
+            <button id="send_chat" style="width: 100%; margin-top: 10px;">Enviar</button>
+            <ul id="messages"></ul>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const usernameInput = document.getElementById('username');
+
+        document.getElementById('send_chat').onclick = () => {
+            const input = document.getElementById('chat');
+            const message = input.value;
+            const username = usernameInput.value || 'Anónimo';
+            const fileInput = document.getElementById('fileInput');
+
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const imgSrc = reader.result;
+                    socket.emit('chat message', { username, message, imgSrc });
+                };
+                reader.readAsDataURL(file);
+                fileInput.value = '';
+            } else {
+                socket.emit('chat message', { username, message, imgSrc: '' });
+            }
+
+            input.value = '';
+        };
+
+        socket.on('chat message', ({ username, message, imgSrc }) => {
+            const messages = document.getElementById('messages');
+            const li = document.createElement('li');
+            li.innerHTML = `<span class="username">${username}:</span> ${message}`;
+            if (imgSrc) {
+                li.innerHTML += `<br><img src="${imgSrc}">`;
+            }
+            messages.appendChild(li);
+            messages.scrollTop = messages.scrollHeight; // Desplazar al final
+        });
+
+        function copyToClipboard() {
+            const urlBase = document.getElementById('url_base');
+            urlBase.disabled = false;
+            urlBase.select();
+            document.execCommand('copy');
+            urlBase.disabled = true;
+            alert('URL copiada al portapapeles!');
+        }
+
+        function getGarticUrl() {
+            fetch('/gartic_url', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+            })
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('url_base').value = data.gartic_url;
+                })
+                .catch(error => console.error('Error al obtener la URL:', error));
+        }
+        getGarticUrl();
+
+        document.getElementById('update_gartic_url').addEventListener('click', function () {
+            const url = document.getElementById('url').value;
+            const currentUrl = new URL(window.location.href);
+            const newUrl = `${currentUrl.origin}/gartic_url`;
+
+            fetch(newUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ url: url, password: document.getElementById('password').value })
+            })
+                .then(response => {
+                    if (response.status === 401) {
+                        alert('No autorizado: Contraseña inválida');
+                        throw new Error('Unauthorized');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    getGarticUrl();
+                })
+                .catch(error => {
+                    if (error.message !== 'Unauthorized') {
+                        alert('Error al actualizar la URL:', error);
+                    }
+                });
+        });
+    </script>
+</body>
+
+</html>
